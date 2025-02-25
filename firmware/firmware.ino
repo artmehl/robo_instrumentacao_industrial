@@ -5,6 +5,7 @@
 #include <SimpleStack.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Ultrasonic.h>
 
 // Pinos RFID
 #define RST_PIN 10
@@ -39,6 +40,7 @@ Adafruit_SSD1306 display(LARGURA_OLED, ALTURA_OLED, &Wire, RESET_OLED);
 MFRC522 rfid(SS_PIN, RST_PIN);
 SoftwareSerial hc05(RX, TX);
 SimpleStack<Movimento> historicoMovimentos(10);
+Ultrasonic ultrasonic(TRIGGER, ECHO);
 
 bool flag = false;
 char carac;
@@ -88,6 +90,12 @@ void stopMotors() {
   digitalWrite(IN_4, HIGH);
 }
 
+float getDistancia() {
+  long microsec = ultrasonic.timing();
+  float distancia = ultrasonic.convert(microsec, Ultrasonic::CM);
+  return distancia;
+}
+
 void readMyCard() { // ISR
   if (millis() - lastIntr >= 100) {
     lastIntr = millis();
@@ -133,6 +141,53 @@ void processCommand(char command) {
   }
 }
 
+float varreduraEsquerda() {
+  float menorDistancia = 0;
+  for (int i = 0; i < 10; i++) {
+    left();
+    delay(100);
+    stopMotors();
+    float distancia = getDistancia();
+    if (distancia < menorDistancia) menorDistancia = distancia;
+  }
+  return menorDistancia;
+}
+
+float varreduraDireita() {
+  float menorDistancia = 0;
+  for (int i = 0; i < 15; i++) {
+    left();
+    delay(100);
+    stopMotors();
+    float distancia = getDistancia();
+    if (distancia < menorDistancia) menorDistancia = distancia;
+  }
+  return menorDistancia;
+}
+
+void buscaMenorDistancia(float menorDistancia, float tolerancia) {
+  while(true) {
+    left();
+    delay(100);
+    stopMotors();
+    float distancia = getDistancia();
+    if (distancia - menorDistancia <= tolerancia) break;
+  }
+}
+
+void buscaTAG(float menorDistancia) {
+  int cont = 0;
+  for (int i = 0; i < 10; i++) {
+    forward();
+    delay(100);
+    stopMotors();
+    float distancia = getDistancia();
+    if (distancia < 5) break;
+    if (menorDistancia < distancia) cont++;
+  }
+  if (cont >= 2) //nova varredura
+}
+
 void autonomo() {
   printOled("INICIANDO AUTO");
   while (true) { // wait for rfid to get out
@@ -146,13 +201,20 @@ void autonomo() {
       break;
     }
 
-    // Inserir lógica de movimentação para a leitura
+    float menorDistanciaEsquerda = varreduraEsquerda();
+    float menorDistanciaDireita = varreduraDireita();
+    float menorDistancia = 0;
+
+    if (menorDistanciaEsquerda <= menorDistanciaDireita) menorDistancia = menorDistanciaEsquerda;
+    else menorDistancia = menorDistanciaDireita;
+
+    float tolerancia = menorDistancia * (1 / 100);
+    buscaMenorDistancia(menorDistancia, tolerancia);
 
     rfid.PCD_WriteRegister(rfid.FIFODataReg, rfid.PICC_CMD_REQA);
     rfid.PCD_WriteRegister(rfid.CommandReg, rfid.PCD_Transceive);
     rfid.PCD_WriteRegister(rfid.BitFramingReg, 0x87);
   }
-  // seguirObjetoHexagono();
 }
 
 void setup() {
