@@ -35,7 +35,6 @@ struct Movimento {
   int tempo;
 };
 
-// U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NO_ACK);  // Display OLED
 Adafruit_SSD1306 display(LARGURA_OLED, ALTURA_OLED, &Wire, RESET_OLED);
 MFRC522 rfid(SS_PIN, RST_PIN);
 SoftwareSerial hc05(RX, TX);
@@ -44,6 +43,15 @@ SimpleStack<Movimento> historicoMovimentos(10);
 bool flag = false;
 char carac;
 long lastIntr = 0;
+
+void printOled(String msg) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0,10);
+  display.print(msg);
+  display.display();
+}
 
 void forward() {
   digitalWrite(IN_1, LOW);
@@ -125,74 +133,6 @@ void processCommand(char command) {
   }
 }
 
-long mediaMovel(int numLeituras) {
-  long soma = 0;
-  int leiturasValidas = 0;
-  for (int i = 0; i < numLeituras; i++) {
-    long duracao = pulseIn(1, HIGH);
-    printOled(String (duracao));
-    if (duracao >= 100 && duracao <= 8000) {
-      soma += duracao;
-      leiturasValidas++;
-    }
-    delay(15);
-  }
-  return leiturasValidas > 0 ? soma / leiturasValidas : 999999;
-}
-
-void refazerCaminho() {
-  printOled("Voltando...");
-  while (!historicoMovimentos.isEmpty()) {
-    Movimento mov; 
-    if (historicoMovimentos.pop(&mov)) {  // Passando um ponteiro para a função pop
-      switch (mov.tipo) {
-        case 'F':
-          printOled("BACKWARD");
-          backward();
-          break;
-        case 'E':
-          printOled("RIGHT");
-          right();
-          break;
-        case 'D':
-          printOled("LEFT");
-          left();
-          break;
-      }
-      delay(mov.tempo);
-    }
-  }
-  stopMotors();
-}
-
-void seguirObjetoHexagono() {
-  long leituraAtual = mediaMovel(10);
-  
-  // Movimento para frente
-  printOled("AUTO_FORWARD");
-  forward();
-  historicoMovimentos.push({'F', 1500});
-  delay(1500);
-  
-  // Movimento para a esquerda até a leitura do sensor ser <= 500
-  printOled("AUTO_LEFT");
-  left();
-  
-  long tempoInicio = millis();  // Marca o tempo de início do giro
-  while (mediaMovel(10) > 500) {
-    //Serial.println(mediaMovel(10));  // Exibe a leitura do sensor no serial
-    delay(50);  // Pequena espera para suavizar a leitura
-  }
-  long tempoGiro = millis() - tempoInicio;  // Calcula o tempo total do giro
-  historicoMovimentos.push({'E', tempoGiro});
-  
-  // Movimento para a direita para evitar colisão
-  printOled("AUTO_RIGHT");
-  right();
-  historicoMovimentos.push({'R', 1000});
-  delay(1000);
-}
-
 void autonomo() {
   printOled("INICIANDO AUTO");
   while (true) { // wait for rfid to get out
@@ -206,22 +146,13 @@ void autonomo() {
       break;
     }
 
-    seguirObjetoHexagono();
+    // Inserir lógica de movimentação para a leitura
 
     rfid.PCD_WriteRegister(rfid.FIFODataReg, rfid.PICC_CMD_REQA);
     rfid.PCD_WriteRegister(rfid.CommandReg, rfid.PCD_Transceive);
     rfid.PCD_WriteRegister(rfid.BitFramingReg, 0x87);
   }
   // seguirObjetoHexagono();
-}
-
-void printOled(String msg) {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,10);
-  display.print(msg);
-  display.display();
 }
 
 void setup() {
