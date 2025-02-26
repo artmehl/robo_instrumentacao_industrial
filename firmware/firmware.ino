@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <SimpleStack.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Ultrasonic.h>
@@ -10,7 +9,6 @@
 // Pinos RFID
 #define RST_PIN 10
 #define SS_PIN 9
-#define IRQ_PIN 2
 
 // Pinos HC-05
 #define TX 8
@@ -31,20 +29,12 @@
 #define ALTURA_OLED 64
 #define RESET_OLED -1
 
-struct Movimento {
-  char tipo;
-  int tempo;
-};
-
 Adafruit_SSD1306 display(LARGURA_OLED, ALTURA_OLED, &Wire, RESET_OLED);
 MFRC522 rfid(SS_PIN, RST_PIN);
 SoftwareSerial hc05(RX, TX);
-SimpleStack<Movimento> historicoMovimentos(10);
 Ultrasonic ultrasonic(TRIGGER, ECHO);
 
-bool flag = false;
 char carac;
-long lastIntr = 0;
 
 void printOled(String msg) {
   display.clearDisplay();
@@ -102,18 +92,6 @@ float getDistancia() {
   return distancia;
 }
 
-float menorValor (float x, float y) {
-  if (x > y) return x;
-  else return y;
-}
-
-void readMyCard() { // ISR
-  if (millis() - lastIntr >= 100) {
-    lastIntr = millis();
-    flag = true;
-  }
-}
-
 void processCommand(char command) {
   switch (command) {
     case 'F':
@@ -152,8 +130,7 @@ void processCommand(char command) {
   }
 }
 
-void varreduraEsquerda() {
-  // float distancia = 99999999999;
+void varredura() {
   while (true) {
     left();
     delay(50);
@@ -163,43 +140,13 @@ void varreduraEsquerda() {
     Serial.println(distancia);
     if (distancia < 50) break;
   }
-  // stopMotors();
-}
-
-float varreduraDireita() {
-  float menorDistancia = 99999999999;
-  for (int i = 0; i < 20; i++) {
-    left();
-    delay(15);
-    stopMotors();
-    float distancia = getDistancia();
-    // Serial.println(distancia);
-    if ((distancia < menorDistancia) && (distancia != 0)) menorDistancia = distancia;
-  }
-  stopMotors();
-  return menorDistancia;
-}
-
-void buscaMenorDistancia(float menorDistancia, float tolerancia) {
-  while(true) {
-    left();
-    delay(100);
-    stopMotors();
-    float distancia = getDistancia();
-    if (distancia - menorDistancia <= tolerancia) break;
-  }
 }
 
 void buscaTAG() {
   while(true) {
     //le a TAG, SE LER, BREAK
-    if ((rfid.PICC_IsNewCardPresent())) {
-      backward();
-      delay(3000);
-      stopMotors();
-      break;
-    }
-    else {
+    if (!mfrc522.PICC_IsNewCardPresent()) || (!mfrc522.PICC_ReadCardSerial()) {
+      //Não leu tag
       float distancia = getDistancia();
       if (distancia <= 10) {
         back_right();
@@ -216,12 +163,19 @@ void buscaTAG() {
         delay(100);
         continue;
       }
+
       else {
         forward();
         delay(50);
         stopMotors();
         delay(50);
       }
+    }
+    else { //Leu tag 
+      backward();
+      delay(3000);
+      stopMotors();
+      break;
     }
   }
 }
@@ -233,67 +187,12 @@ void autonomo() {
   forward();
   delay(1000);
   stopMotors();
-  while (true) { // wait for rfid to get out
-    // if (flag) {
-    //   flag = false;
-    //   printOled("LEU TAG");
-    //   Serial.println("LEU TAG");
-    //   backward();
-    //   delay(5000);
-    //   stopMotors();
-    //   if (!rfid.PICC_IsNewCardPresent()) return;
-    //   if (!rfid.PICC_ReadCardSerial()) return;
-    //   break;
-    // }
-    
-    //Varredura
-    // printOled("Var Esq");
-    // float menorDistanciaEsquerda = varreduraEsquerda();
-
+  while (true) {
     Serial.println("Var Esq");
-    varreduraEsquerda();
+    varredura();
     stopMotors();
     buscaTAG();
-    // right();
-    // delay(250);
-    // stopMotors();
     break;
-
-    //Inicia a funcção busca TAG
-    
-    // float menorDistancia = 0;
-
-    // if (menorDistanciaEsquerda <= menorDistanciaDireita) menorDistancia = menorDistanciaEsquerda;
-    // else menorDistancia = menorDistanciaDireita;
-
-    // float tolerancia = menorDistancia * (1 / 100);
-    // buscaMenorDistancia(menorDistancia, tolerancia);
-    // bool achouTag = buscaTAG(menorDistancia);
-    // if (!achouTag) continue;
-    // for (int i = 0; i < 5; i++) {
-    //   if (achouTag && !flag) {
-    //     //Posição Certa, mas não leu
-    //     back_right();
-    //     delay(1000);
-    //     stopMotors();
-    //     backward();
-    //     delay(3000);
-    //     stopMotors();
-    //     while (getDistancia() > 1500) {
-    //       right();
-    //     }
-    //     stopMotors();
-    //     buscaTAG(menorDistancia);
-    //     right();
-    //     delay(500);
-    //     stopMotors();
-    //   }
-    //   else break;
-    // }
-
-    rfid.PCD_WriteRegister(rfid.FIFODataReg, rfid.PICC_CMD_REQA);
-    rfid.PCD_WriteRegister(rfid.CommandReg, rfid.PCD_Transceive);
-    rfid.PCD_WriteRegister(rfid.BitFramingReg, 0x87);
   }
 }
 
@@ -304,12 +203,9 @@ void setup() {
   pinMode(IN_2, OUTPUT);
   pinMode(IN_3, OUTPUT);
   pinMode(IN_4, OUTPUT);
-  // pinMode(IRQ_PIN, INPUT_PULLUP);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   SPI.begin();
   rfid.PCD_Init();
-  // rfid.PCD_WriteRegister(rfid.ComIEnReg, 0xA0);
-  // attachInterrupt(digitalPinToInterrupt(IRQ_PIN), readMyCard, FALLING);
 }
 
 void loop() {
