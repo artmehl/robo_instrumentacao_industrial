@@ -35,6 +35,7 @@ SoftwareSerial hc05(RX, TX);
 Ultrasonic ultrasonic(TRIGGER, ECHO);
 
 char carac;
+bool result = false;
 
 void printOled(String msg) {
   display.clearDisplay();
@@ -73,7 +74,7 @@ void backward() {
   digitalWrite(IN_4, HIGH);
 }
 
-void back_right() {
+void back_left() {
   digitalWrite(IN_1, HIGH);
   digitalWrite(IN_2, HIGH);
   digitalWrite(IN_3, LOW);
@@ -85,11 +86,6 @@ void stopMotors() {
   digitalWrite(IN_2, HIGH);
   digitalWrite(IN_3, HIGH);
   digitalWrite(IN_4, HIGH);
-}
-
-float getDistancia() {
-  float distancia = ultrasonic.read();
-  return distancia;
 }
 
 void processCommand(char command) {
@@ -131,36 +127,35 @@ void processCommand(char command) {
 
 void varredura() {
   printOled("VARREDURA");
+  Serial.println("Inicio da Varredura")
   while (true) {
+    float distancia = ultrasonic.read();
+    Serial.println(distancia);
+    if (distancia < 50) break; // Achou objeto
     left();
     delay(50);
     stopMotors();
-    delay(50);
-    float distancia = getDistancia();
-    Serial.println(distancia);
-    if (distancia < 50) break;
+    delay(10); // Tirar a Inécia
   }
+  // Tirar a Inécia
+  stopMotors(); 
+  delay(10);
 }
 
-void buscaTAG() {
+bool buscaTAG() {
   printOled("BUSCA TAG");
   while(true) {
-    if (!mfrc522.PICC_IsNewCardPresent()) || (!mfrc522.PICC_ReadCardSerial()) { // nNão leu a TAG
-      float distancia = getDistancia();
-      if (distancia <= 10) {
-        back_right();
+    if (!mfrc522.PICC_IsNewCardPresent()) || (!mfrc522.PICC_ReadCardSerial()) { // Não leu a TAG
+      if (ultrasonic.read()) <= 10) {
+        back_left();
         delay(100);
         stopMotors();
-        delay(100);
+        delay(10);
         backward();
-        delay(100);
+        delay(1000);
         stopMotors();
         delay(100);
-        right();
-        delay(100);
-        stopMotors();
-        delay(100);
-        continue;
+        return false; // Perto do objeto, mas não achou a TAG
       }
 
       else {
@@ -172,26 +167,29 @@ void buscaTAG() {
     }
     else {
       printOled("LEU TAG");
+      Serial.println("Leu a Tag - Terminou :)");
       backward();
       delay(3000);
       stopMotors();
-      break;
+      return true;
     }
   }
 }
 
 void autonomo() {
   printOled("INICIANDO AUTO");
-  Serial.println("INICIANDO AUTO");
+  Serial.println("Iniciando modo autonomo");
+
   Serial.println("ENTRA NA AREA");
   forward();
   delay(1000);
   stopMotors();
+
   while (true) {
     varredura();
-    stopMotors();
-    buscaTAG();
-    break;
+    result = buscaTAG();
+    if (!result) continue; // Reinicia o Loop
+    else break; // Terminou o circuito
   }
 }
 
