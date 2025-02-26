@@ -29,6 +29,8 @@
 #define ALTURA_OLED 64
 #define RESET_OLED -1
 
+#define INERTIA_DELAY 10
+
 Adafruit_SSD1306 display(LARGURA_OLED, ALTURA_OLED, &Wire, RESET_OLED);
 MFRC522 rfid(SS_PIN, RST_PIN);
 SoftwareSerial hc05(RX, TX);
@@ -135,11 +137,11 @@ void varredura() {
     left();
     delay(50);
     stopMotors();
-    delay(10); // Tirar a Inécia
+    delay(INERTIA_DELAY);
   }
-  // Tirar a Inécia
+  
   stopMotors(); 
-  delay(10);
+  delay(INERTIA_DELAY);
 }
 
 bool buscaTAG() {
@@ -150,7 +152,7 @@ bool buscaTAG() {
         back_left();
         delay(100);
         stopMotors();
-        delay(10);
+        delay(INERTIA_DELAY);
         backward();
         delay(1000);
         stopMotors();
