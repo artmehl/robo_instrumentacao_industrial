@@ -97,7 +97,6 @@ void processCommand(char command) {
     case 'F':
       printOled("FORWARD");
       forward();
-      printOled("VAI PARAR");
       break;
 
     case 'E':
@@ -131,6 +130,7 @@ void processCommand(char command) {
 }
 
 void varredura() {
+  printOled("VARREDURA");
   while (true) {
     left();
     delay(50);
@@ -143,10 +143,9 @@ void varredura() {
 }
 
 void buscaTAG() {
+  printOled("BUSCA TAG");
   while(true) {
-    //le a TAG, SE LER, BREAK
-    if (!mfrc522.PICC_IsNewCardPresent()) || (!mfrc522.PICC_ReadCardSerial()) {
-      //Não leu tag
+    if (!mfrc522.PICC_IsNewCardPresent()) || (!mfrc522.PICC_ReadCardSerial()) { // nNão leu a TAG
       float distancia = getDistancia();
       if (distancia <= 10) {
         back_right();
@@ -171,7 +170,8 @@ void buscaTAG() {
         delay(50);
       }
     }
-    else { //Leu tag 
+    else {
+      printOled("LEU TAG");
       backward();
       delay(3000);
       stopMotors();
@@ -183,12 +183,11 @@ void buscaTAG() {
 void autonomo() {
   printOled("INICIANDO AUTO");
   Serial.println("INICIANDO AUTO");
-  Serial.println("Entra na area");
+  Serial.println("ENTRA NA AREA");
   forward();
   delay(1000);
   stopMotors();
   while (true) {
-    Serial.println("Var Esq");
     varredura();
     stopMotors();
     buscaTAG();
